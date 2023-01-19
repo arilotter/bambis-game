@@ -1,18 +1,10 @@
 use bevy::prelude::*;
+use proto::dungeon::{Tile, TileKind};
 use rand::Rng;
 
 use crate::math::{iter_float, random_point_in_circle};
 
-pub enum TileKind {
-    Empty,
-    Wall,
-    Floor,
-}
-pub struct Tile {
-    pub kind: TileKind,
-}
-
-pub fn gen_dungeon() -> (Vec<Room>, Vec<Vec<Tile>>) {
+pub fn gen_dungeon() -> Vec<Vec<Tile>> {
     let mut rng = rand::thread_rng();
     let dungeon_size = 40.0;
     let max_room_size = dungeon_size / 2.0;
@@ -62,7 +54,7 @@ pub fn gen_dungeon() -> (Vec<Room>, Vec<Vec<Tile>>) {
         }
     }
 
-    let full_dungeon: Vec<Vec<Tile>> = iter_float(top..=bottom, 1.0)
+    iter_float(top..=bottom, 1.0)
         .map(|y| {
             iter_float(left..=right, 1.0)
                 .map(|x| {
@@ -86,8 +78,7 @@ pub fn gen_dungeon() -> (Vec<Room>, Vec<Vec<Tile>>) {
                 })
                 .collect()
         })
-        .collect();
-    (rooms, full_dungeon)
+        .collect()
 }
 
 pub struct Room {

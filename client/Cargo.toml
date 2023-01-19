@@ -1,0 +1,19 @@
+[package]
+name = "bambis-game"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bevy = "0.9.1"
+bevy_rapier2d = "0.19.0"
+bevy_slinet = { path = "../slinet", features = [
+    "client",
+    "bincode",
+    "protocol_udp",
+    "serializer_bincode",
+] }
+instant = "0.1.12"
+rand = "0.8.5"
+proto = { path = "../proto" }

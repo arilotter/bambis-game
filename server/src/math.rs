@@ -5,11 +5,6 @@ use std::{
 
 use bevy::prelude::*;
 use rand::Rng;
-
-pub fn lerp(a: f32, b: f32, t: f32) -> f32 {
-    a + (b - a) * t
-}
-
 pub fn random_point_in_circle(radius: f32) -> Vec2 {
     let mut rng = rand::thread_rng();
     let t = 2.0 * PI * rng.gen_range(0.0..1.0);

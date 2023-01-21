@@ -4,16 +4,47 @@ use bevy_slinet::{
     server::{NewConnectionEvent, PacketReceiveEvent, ServerConnections, ServerPlugin},
 };
 use dungeon::gen_dungeon;
-use proto::{dungeon::Tile, *};
+use proto::{
+    dungeon::{Tile, TileKind},
+    *,
+};
 
 mod dungeon;
 mod math;
 
 #[derive(Component)]
-struct Dungeon(Vec<Vec<Tile>>);
+struct Dungeon {
+    tiles: Vec<Vec<Tile>>,
+    spawn_points: Vec<(usize, usize)>,
+    spawn_index: usize,
+}
 impl Dungeon {
-    fn new(dungeon: Vec<Vec<Tile>>) -> Self {
-        Self(dungeon)
+    fn gen() -> Self {
+        let tiles = gen_dungeon();
+        let mut spawn_points = Vec::with_capacity(4);
+        'outer: for (y, row) in tiles.iter().enumerate() {
+            for (x, tile) in row.iter().enumerate() {
+                if spawn_points.len() >= 4 {
+                    break 'outer;
+                }
+                if matches!(tile.kind, TileKind::Floor) {
+                    spawn_points.push((x, y))
+                }
+            }
+        }
+        Self {
+            tiles,
+            spawn_points,
+            spawn_index: 0,
+        }
+    }
+    fn get_spawn_point(&mut self) -> (usize, usize) {
+        let point = self.spawn_points[self.spawn_index];
+        self.spawn_index += 1;
+        point
+    }
+    fn get_tiles(&self) -> Vec<Vec<Tile>> {
+        self.tiles.clone()
     }
 }
 
@@ -28,14 +59,14 @@ fn main() {
 }
 
 fn gen_dungeon_system(mut commands: Commands) {
-    commands.spawn(Dungeon::new(gen_dungeon()));
+    commands.spawn(Dungeon::gen());
 }
 
 fn new_connection_system(
     mut commands: Commands,
     mut events: EventReader<NewConnectionEvent<NetworkingConfig>>,
     characters: Query<&Character>,
-    dungeon: Query<&Dungeon>,
+    mut dungeon: Query<&mut Dungeon>,
 ) {
     // associate a player ID with the connection
     for event in events.iter() {
@@ -44,10 +75,14 @@ fn new_connection_system(
             .connection
             .send(ServerPacket::IdentifyClient(new_id))
             .unwrap();
-        eprintln!("sending dungeon");
+        let mut d = dungeon.single_mut();
+
         event
             .connection
-            .send(ServerPacket::Dungeon(dungeon.single().0.clone()))
+            .send(ServerPacket::Dungeon {
+                tiles: d.get_tiles(),
+                spawn_point: d.get_spawn_point(),
+            })
             .unwrap();
         commands
             .spawn(Character::new(new_id))

@@ -35,7 +35,10 @@ pub enum ClientPacket {
 pub enum ServerPacket {
     PlayerPosition(usize, Vec2),
     IdentifyClient(usize),
-    Dungeon(Vec<Vec<dungeon::Tile>>),
+    Dungeon {
+        tiles: Vec<Vec<dungeon::Tile>>,
+        spawn_point: (usize, usize),
+    },
 }
 
 #[derive(Component)]

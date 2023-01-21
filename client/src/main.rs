@@ -15,9 +15,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_startup_system(startup)
-        .add_plugin(ClientPlugin::<NetworkingConfig>::connect(
-            "192.168.2.127:3000",
-        ))
+        .add_plugin(ClientPlugin::<NetworkingConfig>::connect("127.0.0.1:3000"))
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0))
         .add_plugin(RapierDebugRenderPlugin::default())
         .add_system(update_system)
@@ -112,7 +110,8 @@ fn packet_receive_system(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut events: EventReader<PacketReceiveEvent<NetworkingConfig>>,
-    mut characters: Query<(&mut Transform, &Character)>,
+    mut characters: Query<(&mut Transform, &Character), Without<Player>>,
+    mut player: Query<Entity, With<Player>>,
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
     // mut player: Query<Option<&Character>, With<Player>>,
 ) {
@@ -122,7 +121,6 @@ fn packet_receive_system(
                 let mut found = false;
                 for mut c in characters.iter_mut() {
                     if &c.1.id == player {
-                        eprintln!("x {} y {}", pos.x, pos.y);
                         c.0.translation.x = pos.x;
                         c.0.translation.y = pos.y;
                         found = true;
@@ -145,8 +143,12 @@ fn packet_receive_system(
                         .insert(Character::new(*player));
                 }
             }
-            ServerPacket::IdentifyClient(id) => {}
-            ServerPacket::Dungeon(dungeon) => {
+            ServerPacket::IdentifyClient(id) => {
+                if let Ok(p) = player.get_single() {
+                    commands.entity(p).insert(Character::new(*id));
+                }
+            }
+            ServerPacket::Dungeon { spawn_point, tiles } => {
                 let texture_handle = asset_server.load("tiles.png");
                 let texture_atlas = TextureAtlas::from_grid(
                     texture_handle,
@@ -160,9 +162,7 @@ fn packet_receive_system(
                     None,
                 );
                 let texture_atlas_handle = texture_atlases.add(texture_atlas);
-                eprintln!("spwaning dungeon");
-                let mut spawn_point = Vec2::new(0.0, 0.0);
-                for (y, row) in dungeon.into_iter().enumerate() {
+                for (y, row) in tiles.into_iter().enumerate() {
                     for (x, tile) in row.into_iter().enumerate() {
                         let mut e = commands.spawn(SpriteSheetBundle {
                             sprite: TextureAtlasSprite::new(match tile.kind {
@@ -181,8 +181,6 @@ fn packet_receive_system(
                         if matches!(tile.kind, TileKind::Wall) {
                             e.insert(RigidBody::Fixed)
                                 .insert(Collider::cuboid(32.0, 32.0));
-                        } else if matches!(tile.kind, TileKind::Floor) {
-                            spawn_point = Vec2::new(x as f32, y as f32) * (TILE_SIZE as f32);
                         }
                     }
                 }
@@ -190,7 +188,11 @@ fn packet_receive_system(
                     .spawn(SpriteBundle {
                         texture: asset_server.load("guy.png"),
                         transform: Transform {
-                            translation: Vec3::new(spawn_point.x, spawn_point.y, 1.0),
+                            translation: Vec3::new(
+                                (spawn_point.0 * TILE_SIZE) as f32,
+                                (spawn_point.1 * TILE_SIZE) as f32,
+                                1.0,
+                            ),
                             ..Default::default()
                         },
                         ..Default::default()

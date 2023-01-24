@@ -6,8 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bevy = "0.9.1"
-bevy_slinet = { path = "../slinet", features = [
+bevy_slinet = { git = "https://github.com/arilotter/bevy_slinet.git", rev = "e1c10ee4a989c200ea03e0dac414b36d9b036d74", features = [
     "server",
     "bincode",
     "protocol_udp",
@@ -15,3 +14,4 @@ bevy_slinet = { path = "../slinet", features = [
 ] }
 proto = { path = "../proto" }
 rand = "0.8.5"
+bevy = "0.9"

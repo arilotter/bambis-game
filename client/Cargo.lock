@@ -799,6 +799,7 @@ dependencies = [
 [[package]]
 name = "bevy_simple_stat_bars"
 version = "0.3.0"
+source = "git+https://github.com/arilotter/bevy_simple_stat_bars.git?rev=caa69c0f1f0e4a935eceff69dbac1e10aa33d115#caa69c0f1f0e4a935eceff69dbac1e10aa33d115"
 dependencies = [
  "bevy",
  "copyless",
@@ -807,6 +808,7 @@ dependencies = [
 [[package]]
 name = "bevy_slinet"
 version = "0.4.0"
+source = "git+https://github.com/arilotter/bevy_slinet.git?rev=e1c10ee4a989c200ea03e0dac414b36d9b036d74#e1c10ee4a989c200ea03e0dac414b36d9b036d74"
 dependencies = [
  "async-trait",
  "bevy",

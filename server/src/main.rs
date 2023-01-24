@@ -18,6 +18,7 @@ struct Dungeon {
     spawn_points: Vec<(usize, usize)>,
     spawn_index: usize,
 }
+
 impl Dungeon {
     fn gen() -> Self {
         let tiles = gen_dungeon();
@@ -41,6 +42,7 @@ impl Dungeon {
     fn get_spawn_point(&mut self) -> (usize, usize) {
         let point = self.spawn_points[self.spawn_index];
         self.spawn_index += 1;
+        self.spawn_index %= self.spawn_points.len();
         point
     }
     fn get_tiles(&self) -> Vec<Vec<Tile>> {
@@ -103,7 +105,8 @@ fn packet_receive_system(
                     .iter()
                     .find(|c| c.1 == &event.connection.id())
                     .unwrap();
-                let packet = ServerPacket::PlayerPosition(char.0.id, *pos);
+                let packet =
+                    ServerPacket::CharacterPosition(char.0.id, *pos, CharacterType::Player);
                 for conn in connections.iter() {
                     if &conn.id() != char.1 {
                         conn.send(packet.clone()).unwrap();

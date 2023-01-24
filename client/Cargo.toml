@@ -17,3 +17,5 @@ bevy_slinet = { path = "../slinet", features = [
 instant = "0.1.12"
 rand = "0.8.5"
 proto = { path = "../proto" }
+bevy_simple_stat_bars = { path = "../bevy_simple_stat_bars" }
+bevy_magic_light_2d = { git = "https://github.com/zaycev/bevy-magic-light-2d.git", version = "0.3.0" }

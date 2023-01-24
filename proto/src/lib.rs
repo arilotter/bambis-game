@@ -32,8 +32,14 @@ pub enum ClientPacket {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum CharacterType {
+    Player,
+    Bingus,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ServerPacket {
-    PlayerPosition(usize, Vec2),
+    CharacterPosition(usize, Vec2, CharacterType),
     IdentifyClient(usize),
     Dungeon {
         tiles: Vec<Vec<dungeon::Tile>>,
@@ -48,5 +54,17 @@ pub struct Character {
 impl Character {
     pub fn new(id: usize) -> Self {
         Self { id }
+    }
+}
+
+#[derive(Component)]
+pub struct Health {
+    pub hp: usize,
+    pub max: usize,
+}
+
+impl Health {
+    pub fn new(max: usize) -> Self {
+        Self { max, hp: max }
     }
 }

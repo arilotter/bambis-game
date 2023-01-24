@@ -1,11 +1,16 @@
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
+use bevy_simple_stat_bars::StatBarsPlugin;
 use bevy_slinet::client::{ClientConnections, ClientPlugin, PacketReceiveEvent};
+use collision_groups::{COL_BULLET, COL_DUDE, COL_FILTER_BULLET, COL_FILTER_DUDE, COL_TERRAIN};
 use constants::{SPEED, TILE_SIZE};
+use dude::{dude_hp_bar, DudeBundle};
 use math::lerp;
 use proto::{dungeon::TileKind, Character, ClientPacket, NetworkingConfig, ServerPacket};
 
+mod collision_groups;
 mod constants;
+mod dude;
 mod math;
 
 #[derive(Component)]
@@ -18,6 +23,8 @@ fn main() {
         .add_plugin(ClientPlugin::<NetworkingConfig>::connect("127.0.0.1:3000"))
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0))
         .add_plugin(RapierDebugRenderPlugin::default())
+        .add_plugin(StatBarsPlugin)
+        .insert_resource(ClearColor(Color::rgb_u8(255, 255, 255)))
         .add_system(update_system)
         .add_system(pin_camera_to_player_system)
         .add_system(packet_receive_system)
@@ -63,8 +70,8 @@ fn update_system(
             let p_transform = c.1;
             let p_rot = p_transform.rotation.to_euler(EulerRot::ZXY).0;
             let proj_vel = Vec2::new(p_rot.cos(), p_rot.sin());
-            commands
-                .spawn(SpriteBundle {
+            commands.spawn((
+                SpriteBundle {
                     texture: asset_server.load("bullet.png"),
                     transform: Transform {
                         translation: p_transform.translation
@@ -73,14 +80,17 @@ fn update_system(
                         ..Default::default()
                     },
                     ..Default::default()
-                })
-                .insert(RigidBody::KinematicVelocityBased)
-                .insert(Collider::cuboid(16.0, 1.0))
-                .insert(Sensor)
-                .insert(Velocity {
+                },
+                RigidBody::Dynamic,
+                GravityScale(0.0),
+                Collider::cuboid(16.0, 1.0),
+                CollisionGroups::new(COL_BULLET, COL_FILTER_BULLET),
+                Velocity {
                     linvel: proj_vel * 1000.0,
                     angvel: 0.0,
-                });
+                },
+                Ccd::enabled(),
+            ));
         }
     }
 }
@@ -111,13 +121,12 @@ fn packet_receive_system(
     asset_server: Res<AssetServer>,
     mut events: EventReader<PacketReceiveEvent<NetworkingConfig>>,
     mut characters: Query<(&mut Transform, &Character), Without<Player>>,
-    mut player: Query<Entity, With<Player>>,
+    player: Query<Entity, With<Player>>,
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
-    // mut player: Query<Option<&Character>, With<Player>>,
 ) {
     for event in events.iter() {
         match &event.packet {
-            ServerPacket::PlayerPosition(player, pos) => {
+            ServerPacket::CharacterPosition(player, pos, kind) => {
                 let mut found = false;
                 for mut c in characters.iter_mut() {
                     if &c.1.id == player {
@@ -128,19 +137,11 @@ fn packet_receive_system(
                     }
                 }
                 if !found {
-                    eprintln!("Spawning!");
-                    commands
-                        .spawn(SpriteBundle {
-                            texture: asset_server.load("guy.png"),
-                            transform: Transform {
-                                translation: Vec3::new(pos.x, pos.y, 1.0),
-                                ..Default::default()
-                            },
-                            ..Default::default()
-                        })
-                        .insert(RigidBody::KinematicPositionBased)
-                        .insert(Collider::ball(16.0))
-                        .insert(Character::new(*player));
+                    let dude = commands
+                        .spawn(DudeBundle::new(asset_server.load("guy.png"), *pos, 100))
+                        .insert(Character::new(*player))
+                        .id();
+                    commands.spawn(dude_hp_bar(dude));
                 }
             }
             ServerPacket::IdentifyClient(id) => {
@@ -180,27 +181,31 @@ fn packet_receive_system(
                         });
                         if matches!(tile.kind, TileKind::Wall) {
                             e.insert(RigidBody::Fixed)
-                                .insert(Collider::cuboid(32.0, 32.0));
+                                .insert(Collider::cuboid(32.0, 32.0))
+                                .insert(CollisionGroups::new(COL_TERRAIN, Group::ALL));
                         }
                     }
                 }
-                commands
-                    .spawn(SpriteBundle {
-                        texture: asset_server.load("guy.png"),
-                        transform: Transform {
-                            translation: Vec3::new(
-                                (spawn_point.0 * TILE_SIZE) as f32,
-                                (spawn_point.1 * TILE_SIZE) as f32,
-                                1.0,
-                            ),
-                            ..Default::default()
-                        },
-                        ..Default::default()
+                let dude = commands
+                    .spawn(DudeBundle::new(
+                        asset_server.load("guy.png"),
+                        Vec2::new(
+                            (spawn_point.0 * TILE_SIZE) as f32,
+                            (spawn_point.1 * TILE_SIZE) as f32,
+                        ),
+                        100,
+                    ))
+                    .insert(KinematicCharacterController {
+                        filter_groups: Some(InteractionGroups::new(
+                            COL_DUDE.bits().into(),
+                            COL_FILTER_DUDE.bits().into(),
+                        )),
+                        slide: true,
+                        ..default()
                     })
-                    .insert(RigidBody::KinematicPositionBased)
-                    .insert(Collider::ball(16.0))
-                    .insert(KinematicCharacterController::default())
-                    .insert(Player);
+                    .insert(Player)
+                    .id();
+                commands.spawn(dude_hp_bar(dude));
             }
         }
     }

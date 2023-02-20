@@ -1,4 +1,4 @@
-use bevy_rapier2d::prelude::*;
+use bevy_rapier2d::geometry::Group;
 
 pub const COL_DUDE: Group = Group::GROUP_1;
 pub const COL_BULLET: Group = Group::GROUP_2;

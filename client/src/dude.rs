@@ -1,9 +1,10 @@
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 use bevy_simple_stat_bars::{observers::StatBarObserver, prelude::*};
-use proto::Health;
-
-use crate::collision_groups::{COL_DUDE, COL_FILTER_DUDE};
+use proto::{
+    collision_groups::{COL_DUDE, COL_FILTER_DUDE},
+    Health,
+};
 
 #[derive(Bundle)]
 pub struct DudeBundle {
@@ -21,9 +22,9 @@ impl DudeBundle {
                 texture,
                 transform: Transform {
                     translation: Vec3::new(spawn_point.x, spawn_point.y, 1.0),
-                    ..Default::default()
+                    ..default()
                 },
-                ..Default::default()
+                ..default()
             },
             rigid_body: RigidBody::KinematicPositionBased,
             collider: Collider::ball(16.0),

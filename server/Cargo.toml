@@ -15,3 +15,4 @@ bevy_slinet = { git = "https://github.com/arilotter/bevy_slinet.git", rev = "e1c
 proto = { path = "../proto" }
 rand = "0.8.5"
 bevy = "0.9"
+bevy_rapier2d = "0.20.0"

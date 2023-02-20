@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 bevy = "0.9.1"
+bevy_rapier2d = "0.20.0"
 bevy_slinet = { git = "https://github.com/arilotter/bevy_slinet.git", rev = "e1c10ee4a989c200ea03e0dac414b36d9b036d74", features = [
     "bincode",
     "protocol_udp",

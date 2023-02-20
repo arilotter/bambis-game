@@ -2,14 +2,15 @@ use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 use bevy_simple_stat_bars::StatBarsPlugin;
 use bevy_slinet::client::{ClientConnections, ClientPlugin, PacketReceiveEvent};
-use collision_groups::{COL_BULLET, COL_DUDE, COL_FILTER_BULLET, COL_FILTER_DUDE, COL_TERRAIN};
-use constants::{SPEED, TILE_SIZE};
 use dude::{dude_hp_bar, DudeBundle};
 use math::lerp;
-use proto::{dungeon::TileKind, Character, ClientPacket, NetworkingConfig, ServerPacket};
+use proto::{
+    collision_groups::{COL_DUDE, COL_FILTER_DUDE, COL_TERRAIN},
+    constants::{PLAYER_MOVE_SPEED, TILE_SIZE},
+    dungeon::TileKind,
+    ClientPacket, NetworkingConfig, ObjectInfo, PhysicsInfo, PhysicsObject, ServerPacket,
+};
 
-mod collision_groups;
-mod constants;
 mod dude;
 mod math;
 
@@ -37,9 +38,8 @@ fn startup(mut commands: Commands) {
 }
 
 fn update_system(
-    mut commands: Commands,
+    connections: Res<ClientConnections<NetworkingConfig>>,
     mut controller: Query<(&mut KinematicCharacterController, &mut Transform)>,
-    asset_server: Res<AssetServer>,
     keys: Res<Input<KeyCode>>,
     buttons: Res<Input<MouseButton>>,
     windows: Res<Windows>,
@@ -48,10 +48,10 @@ fn update_system(
         let mut velocity = Vec2::ZERO;
         for key in keys.get_pressed() {
             match key {
-                KeyCode::W => velocity.y += SPEED,
-                KeyCode::S => velocity.y -= SPEED,
-                KeyCode::A => velocity.x -= SPEED,
-                KeyCode::D => velocity.x += SPEED,
+                KeyCode::W => velocity.y += PLAYER_MOVE_SPEED,
+                KeyCode::S => velocity.y -= PLAYER_MOVE_SPEED,
+                KeyCode::A => velocity.x -= PLAYER_MOVE_SPEED,
+                KeyCode::D => velocity.x += PLAYER_MOVE_SPEED,
                 _ => (),
             }
         }
@@ -70,27 +70,14 @@ fn update_system(
             let p_transform = c.1;
             let p_rot = p_transform.rotation.to_euler(EulerRot::ZXY).0;
             let proj_vel = Vec2::new(p_rot.cos(), p_rot.sin());
-            commands.spawn((
-                SpriteBundle {
-                    texture: asset_server.load("bullet.png"),
-                    transform: Transform {
-                        translation: p_transform.translation
-                            + Vec3::new(proj_vel.x, proj_vel.y, 0.0),
-                        rotation: p_transform.rotation,
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-                RigidBody::Dynamic,
-                GravityScale(0.0),
-                Collider::cuboid(16.0, 1.0),
-                CollisionGroups::new(COL_BULLET, COL_FILTER_BULLET),
-                Velocity {
-                    linvel: proj_vel * 1000.0,
-                    angvel: 0.0,
-                },
-                Ccd::enabled(),
-            ));
+            for conn in connections.iter() {
+                let _ = conn.send(ClientPacket::ShootBullet(PhysicsInfo {
+                    ang_vel: 0.0,
+                    pos: Vec2::new(p_transform.translation.x, p_transform.translation.y),
+                    rot: p_transform.rotation.y,
+                    vel: proj_vel * 3.0,
+                }));
+            }
         }
     }
 }
@@ -120,36 +107,82 @@ fn packet_receive_system(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut events: EventReader<PacketReceiveEvent<NetworkingConfig>>,
-    mut characters: Query<(&mut Transform, &Character), Without<Player>>,
-    player: Query<Entity, With<Player>>,
+    mut physics_objects: Query<(
+        &mut Transform,
+        &mut Velocity,
+        &PhysicsObject,
+        Option<&Player>,
+    )>,
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
 ) {
     for event in events.iter() {
         match &event.packet {
-            ServerPacket::CharacterPosition(player, pos, kind) => {
+            ServerPacket::ObjectUpdate {
+                info,
+                ang_vel,
+                id,
+                pos,
+                rot,
+                vel,
+            } => {
                 let mut found = false;
-                for mut c in characters.iter_mut() {
-                    if &c.1.id == player {
-                        c.0.translation.x = pos.x;
-                        c.0.translation.y = pos.y;
+                for mut c in physics_objects.iter_mut() {
+                    if &c.2.id == id {
+                        if c.3.is_none() {
+                            c.0.translation.x = dbg!(pos.x);
+                            c.0.translation.y = dbg!(pos.y);
+                            c.0.rotation.y = *rot;
+
+                            c.1.angvel = *ang_vel;
+                            c.1.linvel = *vel;
+                        }
                         found = true;
                         break;
                     }
                 }
                 if !found {
-                    let dude = commands
-                        .spawn(DudeBundle::new(asset_server.load("guy.png"), *pos, 100))
-                        .insert(Character::new(*player))
-                        .id();
-                    commands.spawn(dude_hp_bar(dude));
+                    let mut spawned = commands.spawn(info.create_instance(*id));
+                    match info {
+                        ObjectInfo::Player { is_you } => {
+                            spawned.insert(DudeBundle::new(
+                                asset_server.load("guy.png"),
+                                *pos,
+                                100,
+                            ));
+                            if *is_you {
+                                spawned.insert((
+                                    Player,
+                                    KinematicCharacterController {
+                                        filter_groups: Some(CollisionGroups::new(
+                                            COL_DUDE,
+                                            COL_FILTER_DUDE,
+                                        )),
+                                        slide: true,
+                                        ..default()
+                                    },
+                                ));
+                            }
+                        }
+                        ObjectInfo::Bullet => {
+                            spawned.insert(SpriteBundle {
+                                texture: asset_server.load("bullet.png"),
+                                ..default()
+                            });
+                        }
+                        _ => {}
+                    }
+
+                    let spawned_id = spawned.id();
+
+                    match info {
+                        ObjectInfo::Player { .. } => {
+                            commands.spawn(dude_hp_bar(spawned_id));
+                        }
+                        _ => {}
+                    }
                 }
             }
-            ServerPacket::IdentifyClient(id) => {
-                if let Ok(p) = player.get_single() {
-                    commands.entity(p).insert(Character::new(*id));
-                }
-            }
-            ServerPacket::Dungeon { spawn_point, tiles } => {
+            ServerPacket::Dungeon { tiles } => {
                 let texture_handle = asset_server.load("tiles.png");
                 let texture_atlas = TextureAtlas::from_grid(
                     texture_handle,
@@ -163,6 +196,7 @@ fn packet_receive_system(
                     None,
                 );
                 let texture_atlas_handle = texture_atlases.add(texture_atlas);
+                // todo dedupe w server position code
                 for (y, row) in tiles.into_iter().enumerate() {
                     for (x, tile) in row.into_iter().enumerate() {
                         let mut e = commands.spawn(SpriteSheetBundle {
@@ -175,9 +209,9 @@ fn packet_receive_system(
                             transform: Transform {
                                 translation: Vec3::new(x as f32, y as f32, 0.0)
                                     * (TILE_SIZE as f32),
-                                ..Default::default()
+                                ..default()
                             },
-                            ..Default::default()
+                            ..default()
                         });
                         if matches!(tile.kind, TileKind::Wall) {
                             e.insert(RigidBody::Fixed)
@@ -186,26 +220,6 @@ fn packet_receive_system(
                         }
                     }
                 }
-                let dude = commands
-                    .spawn(DudeBundle::new(
-                        asset_server.load("guy.png"),
-                        Vec2::new(
-                            (spawn_point.0 * TILE_SIZE) as f32,
-                            (spawn_point.1 * TILE_SIZE) as f32,
-                        ),
-                        100,
-                    ))
-                    .insert(KinematicCharacterController {
-                        filter_groups: Some(InteractionGroups::new(
-                            COL_DUDE.bits().into(),
-                            COL_FILTER_DUDE.bits().into(),
-                        )),
-                        slide: true,
-                        ..default()
-                    })
-                    .insert(Player)
-                    .id();
-                commands.spawn(dude_hp_bar(dude));
             }
         }
     }
@@ -213,14 +227,16 @@ fn packet_receive_system(
 
 fn send_player_pos_system(
     connections: Res<ClientConnections<NetworkingConfig>>,
-    player: Query<&Transform, With<Player>>,
+    player: Query<(&Transform, &Velocity), With<Player>>,
 ) {
     if let Ok(t) = player.get_single() {
         for conn in connections.iter() {
-            conn.send(ClientPacket::Position(Vec2::new(
-                t.translation.x,
-                t.translation.y,
-            )))
+            conn.send(ClientPacket::PlayerMoved(PhysicsInfo {
+                ang_vel: t.1.angvel,
+                pos: Vec2::new(t.0.translation.x, t.0.translation.y),
+                rot: t.0.rotation.y,
+                vel: t.1.linvel,
+            }))
             .unwrap();
         }
     }

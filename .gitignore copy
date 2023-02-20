@@ -1,5 +1,0 @@
-*.log
-.direnv
-target/
-dist/
-.DS_Store

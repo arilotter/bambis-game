@@ -1,10 +1,5 @@
-use bevy::prelude::*;
-use bevy_rapier2d::prelude::*;
+use crate::prelude::*;
 use bevy_simple_stat_bars::{observers::StatBarObserver, prelude::*};
-use proto::{
-    collision_groups::{COL_DUDE, COL_FILTER_DUDE},
-    Health,
-};
 
 #[derive(Bundle)]
 pub struct DudeBundle {
@@ -13,11 +8,23 @@ pub struct DudeBundle {
     collider: Collider,
     health: Health,
     collision_groups: CollisionGroups,
+    player: Player,
+    rollback: Rollback,
+    name: Name,
+    controller: KinematicCharacterController,
 }
 
 impl DudeBundle {
-    pub fn new(texture: Handle<Image>, spawn_point: Vec2, max_hp: usize) -> Self {
+    pub fn new(
+        player: usize,
+        rollback: Rollback,
+        texture: Handle<Image>,
+        spawn_point: Vec2,
+        max_hp: usize,
+    ) -> Self {
         Self {
+            name: Name::new(format!("Player {}", player)),
+            rollback,
             sprite: SpriteBundle {
                 texture,
                 transform: Transform {
@@ -30,6 +37,12 @@ impl DudeBundle {
             collider: Collider::ball(16.0),
             collision_groups: CollisionGroups::new(COL_DUDE, COL_FILTER_DUDE),
             health: Health::new(max_hp),
+            player: Player { handle: player },
+            controller: KinematicCharacterController {
+                filter_groups: Some(CollisionGroups::new(COL_DUDE, COL_FILTER_DUDE)),
+                slide: true,
+                ..default()
+            },
         }
     }
 }
@@ -62,6 +75,6 @@ pub fn dude_hp_bar(
         StatBarSubject(entity),
         StatBarPosition(40.0 * Vec2::Y),
         StatBarZDepth(2.0),
-        component_observer(|hp: &Health| hp.hp as f32 / hp.max as f32),
+        component_observer(|h: &Health| h.hp as f32 / h.max as f32),
     )
 }
